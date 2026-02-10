@@ -1,4 +1,0 @@
-streamlit
-google-generativeai
-Pillow
-PyPDF2
