@@ -1,168 +1,191 @@
 import streamlit as st
 import google.generativeai as genai
-from youtube_transcript_api import YouTubeTranscriptApi
-from youtube_transcript_api.formatters import TextFormatter
-import yt_dlp
-import os
+from PIL import Image
+import PyPDF2
+import io
 import time
-import re
-import random
 
 # ==========================================
-# 1. 페이지 설정 및 디자인 (CSS)
+# 1. 페이지 설정 및 고급 UI 디자인
 # ==========================================
-st.set_page_config(page_title="윤희찬의 영상 요약해주는 사이트 demo", page_icon="⚡", layout="wide")
+st.set_page_config(page_title="공부 질문 앱 demo", page_icon="🔥", layout="wide")
 
-# 고급진 다크 모드 & 네온 디자인 적용
+# 커스텀 CSS (다크 네온 + 카드 UI)
 st.markdown("""
 <style>
-    .stApp { background-color: #0E1117; color: #FAFAFA; }
-    .stTextInput > div > div > input { background-color: #262730; color: #white; border-radius: 10px; }
-    .stButton > button {
-        background: linear-gradient(90deg, #FF4B4B, #FF914D);
-        color: white; border: none; border-radius: 12px; font-weight: bold; width: 100%; padding: 0.5rem;
+    .stApp { background-color: #0E1117; color: #E0E0E0; font-family: 'Pretendard', sans-serif; }
+    /* 파일 업로더 디자인 */
+    [data-testid='stFileUploader'] {
+        background-color: #1E1E1E; border: 2px dashed #4B4B4B; border-radius: 15px; padding: 20px; text-align: center;
     }
-    .stButton > button:hover { transform: scale(1.02); }
-    .result-card { background-color: #1E1E1E; padding: 20px; border-radius: 15px; border-left: 5px solid #FF4B4B; margin-bottom: 15px;}
+    [data-testid='stFileUploader'] section > button { display: none; } /* Browse 버튼 숨김 */
+    
+    /* 버튼 디자인 */
+    .stButton > button {
+        background: linear-gradient(135deg, #FF3131, #FF914D);
+        color: white; border: none; border-radius: 12px; font-weight: 800; font-size: 1.1rem;
+        width: 100%; padding: 0.8rem; transition: all 0.3s ease; box-shadow: 0 4px 15px rgba(255, 49, 49, 0.3);
+    }
+    .stButton > button:hover { transform: translateY(-3px); box-shadow: 0 6px 20px rgba(255, 49, 49, 0.5); }
+    
+    /* 결과 카드 디자인 */
+    .result-card {
+        background-color: #262730; padding: 25px; border-radius: 15px;
+        border-left: 5px solid #FF3131; margin-bottom: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+    }
+    .info-box { background-color: #262730; padding: 15px; border-radius: 10px; border-left: 5px solid #00C897; }
+    
+    /* 탭 디자인 강조 */
+    .stTabs [data-baseweb="tab-list"] { gap: 10px; }
+    .stTabs [data-baseweb="tab"] {
+        height: 50px; white-space: pre-wrap; background-color: #1E1E1E; border-radius: 10px; color: #A0A0A0; font-weight: bold;
+    }
+    .stTabs [aria-selected="true"] { background-color: #FF3131 !important; color: white !important; }
 </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. 기능 함수 (엔진)
+# 2. 엔진 함수 (에러 방어 기능 추가)
 # ==========================================
-def cleanup_files():
-    for file in os.listdir():
-        if file.endswith(".mp3") or file.endswith(".webm"):
-            try: os.remove(file)
-            except: pass
-
-def extract_video_id(url):
-    patterns = [r'(?:v=|\/)([0-9A-Za-z_-]{11}).*', r'(?:youtu\.be\/)([0-9A-Za-z_-]{11})',
-                r'(?:shorts\/)([0-9A-Za-z_-]{11})', r'^([0-9A-Za-z_-]{11})$']
-    for pattern in patterns:
-        match = re.search(pattern, url)
-        if match: return match.group(1)
-    return None
-
-def get_transcript_text(video_id):
+def extract_text_from_pdf(file):
     try:
-        transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=['ko', 'en'])
-        formatter = TextFormatter()
-        return formatter.format_transcript(transcript)
-    except: return None
-
-# [핵심 수정] 가짜 신분증을 써서 오디오 다운로드
-def download_audio(url):
-    # 유튜브를 속이기 위한 가짜 브라우저 정보 리스트
-    user_agents = [
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.93 Safari/537.36',
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:89.0) Gecko/20100101 Firefox/89.0'
-    ]
-    
-    ydl_opts = {
-        'format': 'bestaudio/best',
-        'outtmpl': 'audio_sample.%(ext)s',
-        'postprocessors': [{'key': 'FFmpegExtractAudio','preferredcodec': 'mp3','preferredquality': '128'}], # 용량 줄임 (192->128)
-        'quiet': True,
-        'nocheckcertificate': True,
-        # 여기에 가짜 신분증을 넣음
-        'http_headers': {
-            'User-Agent': random.choice(user_agents),
-            'Referer': 'https://www.youtube.com/',
-            'Accept-Language': 'en-US,en;q=0.9',
-        }
-    }
-    
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([url])
-        return "audio_sample.mp3"
+        pdf_reader = PyPDF2.PdfReader(file)
+        text = ""
+        # 페이지가 너무 많으면 앞부분 10페이지만 (속도 및 에러 방지)
+        num_pages = len(pdf_reader.pages)
+        pages_to_read = min(num_pages, 10) 
+        
+        for i in range(pages_to_read):
+            page_text = pdf_reader.pages[i].extract_text()
+            if page_text:
+                text += page_text
+        
+        if not text.strip():
+            return "ERROR: PDF에서 텍스트를 읽을 수 없습니다. 스캔본(이미지형 PDF)일 수 있습니다."
+        return text
     except Exception as e:
-        # 에러가 나면 내용을 반환해서 알려줌
-        return f"ERROR: {str(e)}"
+        return f"ERROR: PDF 처리 중 오류 발생 ({e})"
 
 # ==========================================
-# 3. 메인 화면 UI
+# 3. 메인 UI 구성
 # ==========================================
 with st.sidebar:
-    st.header("⚙️ Setting")
+    st.image("https://cdn-icons-png.flaticon.com/512/2666/2666505.png", width=60)
+    st.title("⚙️ 설정 (Settings)")
     if "GOOGLE_API_KEY" in st.secrets:
         api_key = st.secrets["GOOGLE_API_KEY"]
-        st.success("✅ API Ready")
+        st.success("✅ API Key 연동 완료")
     else:
-        api_key = st.text_input("🔑 API Key", type="password")
+        api_key = st.text_input("🔑 API Key 입력", type="password")
+    
     st.markdown("---")
-    st.info("💡 **Tip**")
-    st.caption("자막이 없으면 '오디오 모드'로 전환됩니다.\n(서버 차단 시 실패할 수 있음)")
+    st.markdown("""
+    <div class="info-box">
+        <b>🔥 사용 꿀팁</b><br><br>
+        1. <b>시험지/교과서 사진</b> 한 방 찍어서 올리세요.<br>
+        2. <b>PDF 자료</b>도 OK. (텍스트형 PDF 권장)<br>
+        3. <b>수학 문제</b>도 풀이 과정까지 다 털어드립니다.
+    </div>
+    """, unsafe_allow_html=True)
+    st.caption("© 2026 Future Musk Corp.")
 
-st.title("⚡ Doctor AI : Hyper Study")
-st.markdown("##### 유튜브 링크를 넣으세요. 자막이 없으면 뚫고 들어갑니다.")
+st.markdown("<h1 style='text-align: center;'>🔥 닥터 AI : 실전 문서 분석기</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #A0A0A0; font-size: 1.1rem;'>시험지, 교과서, PDF 던져만 주세요. 핵심만 발라냅니다.</p>", unsafe_allow_html=True)
+st.markdown("<br>", unsafe_allow_html=True)
 
-video_url = st.text_input("🔗 YouTube Link", placeholder="링크 붙여넣기 (Ctrl+V)")
+# 파일 업로드 버튼 (가운데 정렬 느낌)
+col1, col2, col3 = st.columns([1, 4, 1])
+with col2:
+    uploaded_file = st.file_uploader("📄 파일을 이곳에 드래그하거나 클릭하세요 (이미지/PDF)", type=["jpg", "png", "jpeg", "pdf"])
 
-if st.button("🚀 분석 시작 (Analyze)", use_container_width=True):
-    cleanup_files()
+# ==========================================
+# 4. 분석 로직 (핵심 엔진)
+# ==========================================
+if uploaded_file is not None:
+    file_type = uploaded_file.type
     
-    if not api_key:
-        st.error("API 키가 없습니다.")
-        st.stop()
-    if not video_url:
-        st.warning("링크를 입력해주세요.")
-        st.stop()
-        
-    video_id = extract_video_id(video_url)
-    if not video_id:
-        st.error("잘못된 링크입니다.")
-        st.stop()
+    # 미리보기 표시
+    with col2:
+        if "image" in file_type:
+            st.image(uploaded_file, caption="업로드된 이미지 확인", use_column_width=True)
+        elif "pdf" in file_type:
+            st.success(f"📂 PDF 파일 연결됨: {uploaded_file.name}")
 
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-1.5-flash')
-
-    status = st.empty()
-    
-    # 1. 자막 시도
-    status.info("🔍 1단계: 자막을 찾고 있습니다...")
-    script_text = get_transcript_text(video_id)
-
-    final_result = ""
-
-    if script_text:
-        status.success("✅ 자막 발견! 텍스트로 빠르게 분석합니다.")
-        prompt = f"다음 내용을 한국어로 3줄 요약, 핵심단어 5개, 객관식 문제 3개로 정리해:\n{script_text[:30000]}"
-        response = model.generate_content(prompt)
-        final_result = response.text
-    else:
-        status.warning("⚠️ 자막 없음! 2단계: 오디오 다운로드 시도 (우회 접속)...")
-        # 오디오 다운로드 시도
-        audio_result = download_audio(video_url)
-        
-        if "ERROR" in audio_result:
-            st.error("😭 유튜브가 서버 접근을 차단했습니다 (403 Error).")
-            st.code(audio_result)
-            st.info("👉 팁: 이 링크는 저작권 보호가 강력하거나, 서버 차단이 심한 영상입니다. 다른 영상을 시도해주세요.")
+    # 분석 버튼
+    if st.button("🚀 핵심 파악 시작 (Analyze)", use_container_width=True):
+        if not api_key:
+            st.error("🚨 API 키가 없습니다. 사이드바를 확인하세요.")
             st.stop()
-        else:
-            status.info("🧠 다운로드 성공! AI가 듣고 분석 중입니다...")
-            audio_file = genai.upload_file(audio_result)
-            while audio_file.state.name == "PROCESSING":
-                time.sleep(2)
-                audio_file = genai.get_file(audio_file.name)
-            
-            prompt = "이 오디오를 듣고 한국어로 3줄 요약, 핵심단어 5개, 객관식 문제 3개 만들어줘."
-            response = model.generate_content([prompt, audio_file])
-            final_result = response.text
 
-    # 결과 출력
-    st.balloons()
-    status.empty()
-    
-    tab1, tab2, tab3 = st.tabs(["📑 요약", "🔑 단어", "💯 문제"])
-    with tab1:
-        st.markdown(f'<div class="result-card">{final_result}</div>', unsafe_allow_html=True)
-    with tab2:
-        st.info("위 내용을 참고하여 단어를 암기하세요.")
-    with tab3:
-        st.success("위 내용을 참고하여 문제를 풀어보세요.")
-        
-    cleanup_files()
+        genai.configure(api_key=api_key)
+        # 이미지 분석에 더 강한 최신 모델 사용
+        model = genai.GenerativeModel('gemini-1.5-pro-latest') 
+
+        # 진행률 표시바
+        progress_text = "Operation in progress. Please wait."
+        my_bar = st.progress(0)
+        status_text = st.empty()
+
+        try:
+            response_text = ""
+            status_text.markdown("### 🧠 문서를 스캔하고 있습니다... (20%)")
+            my_bar.progress(20)
+            time.sleep(0.5)
+
+            # --- 사장님 말투 프롬프트 설정 ---
+            system_prompt = """
+            너는 '결과주의자 실전 멘토'야. 빙빙 돌려 말하지 말고, 시험에 나올 핵심만 딱딱 짚어줘.
+            말투는 직설적이고 실용적이게. (예: "딴 거 볼 시간 없어, 이것만 외워.", "이거 모르면 시험 포기해라.")
+
+            [반드시 지켜야 할 출력 형식]
+            1. 📝 **3줄 요약 (핵심 타격)**: 초등학생도 이해하게 핵심만 3문장으로.
+            2. 🔑 **핵심 키워드 5 (이것만 외워)**: 시험에 나올 단어 5개와 명쾌한 설명.
+            3. 💯 **실전 문제 3 (틀리면 바보)**: 객관식 문제 3개와 정답 및 **아주 상세한 해설**. 수학이면 풀이 과정 필수 포함.
+            """
+            # -----------------------------------
+
+            # 1. 이미지 분석 (Vision)
+            if "image" in file_type:
+                status_text.markdown("### 👁️ 이미지를 분석 중입니다... (60%)")
+                my_bar.progress(60)
+                image = Image.open(uploaded_file)
+                final_prompt = system_prompt + "\n[분석할 이미지의 내용]"
+                response = model.generate_content([final_prompt, image])
+                response_text = response.text
+
+            # 2. PDF 분석 (Text)
+            elif "pdf" in file_type:
+                status_text.markdown("### 📃 PDF 텍스트 추출 중... (40%)")
+                my_bar.progress(40)
+                text_data = extract_text_from_pdf(uploaded_file)
+                
+                if text_data.startswith("ERROR"):
+                    st.error(text_data)
+                    st.stop()
+                
+                status_text.markdown("### 🧠 텍스트 분석 및 요약 중... (80%)")
+                my_bar.progress(80)
+                final_prompt = f"{system_prompt}\n[분석할 텍스트 내용]\n{text_data[:30000]}"
+                response = model.generate_content(final_prompt)
+                response_text = response.text
+
+            # 완료 처리
+            my_bar.progress(100)
+            status_text.empty()
+            time.sleep(0.5)
+            st.balloons()
+
+            # 결과 출력 (탭 디자인 적용)
+            st.markdown("### 🎉 분석 완료! 아래 탭에서 확인하세요.")
+            tab1, tab2, tab3 = st.tabs(["📑 요약 노트", "🔑 암기 키워드", "💯 실전 문제 풀이"])
+            
+            with tab1:
+                st.markdown(f'<div class="result-card">{response_text}</div>', unsafe_allow_html=True)
+            with tab2:
+                 st.info("💡 핑계 대지 말고 여기 있는 단어는 다 외우세요.")
+            with tab3:
+                 st.success("✅ 문제 풀고 해설 꼭 확인하세요. 틀린 건 오답노트 필수!")
+
+        except Exception as e:
+             st.error(f"오류가 발생했습니다: {e}")
+             st.warning("혹시 파일이 너무 크거나, 암호가 걸려있진 않은지 확인해주세요.")
