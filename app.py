@@ -1,45 +1,50 @@
 import streamlit as st
 import google.generativeai as genai
 
-# 1. 페이지 기본 설정 (화면 꽉 차게, 아이콘 설정)
+# 1. 페이지 설정
 st.set_page_config(
     page_title="닥터 AI - 공부 시간 단축기",
     page_icon="🎓",
     layout="wide"
 )
 
-# 2. 사이드바 (왼쪽 메뉴) 만들기
-with st.sidebar:
-    st.header("⚙️ 설정")
-    # API 키 입력받기 (비밀번호처럼 가려짐)
-    api_key = st.text_input("🔑 구글 API 키를 입력하세요", type="password")
-    st.markdown("---")
-    st.write("Create by. **미래의 일론 머스크**")
-    st.info("💡 유튜브 자막을 복사해서 붙여넣으면 AI가 분석해 줍니다.")
+# 2. 비밀 키 가져오기 (여기가 바뀜!)
+# 사용자가 입력할 필요 없이, 네가 설정한 Secrets에서 몰래 가져옴
+if "GOOGLE_API_KEY" in st.secrets:
+    api_key = st.secrets["GOOGLE_API_KEY"]
+else:
+    # 혹시 Secrets 설정이 안 되어 있을 때만 입력창 보여줌 (비상용)
+    with st.sidebar:
+        api_key = st.text_input("🔑 API 키가 필요합니다", type="password")
 
 # 3. 메인 화면 디자인
 st.title("🎓 닥터 AI : 3초 만에 끝내는 시험공부")
 st.markdown("### 1시간짜리 강의? **3초면 핵심 파악 끝.**")
 
-# 4. 입력창 (높이 조절)
+# 4. 사이드바 (설명만 남김)
+with st.sidebar:
+    st.header("사용법 💡")
+    st.write("1. 유튜브 자막을 복사하세요.")
+    st.write("2. 입력창에 붙여넣으세요.")
+    st.write("3. 버튼만 누르면 끝!")
+    st.markdown("---")
+    st.write("Create by. **미래의 일론 머스크**")
+
+# 5. 입력창
 script = st.text_area("👇 여기에 영상 자막(스크립트)을 붙여넣으세요:", height=300, placeholder="자막 내용을 여기에 붙여넣기 하면 됩니다!")
 
-# 5. 분석 버튼 & AI 로직
+# 6. 분석 버튼 & AI 로직
 if st.button("🚀 AI 분석 시작 (Click)", use_container_width=True):
-    # 예외 처리: 입력값이 없을 때 경고
     if not api_key:
-        st.error("왼쪽 사이드바에 '구글 API 키'를 먼저 입력해주세요! 👈")
+        st.error("설정 오류: API 키가 없습니다. 개발자에게 문의하세요!")
     elif not script:
         st.warning("분석할 자막 내용이 비어있습니다! 📝")
     else:
-        # 로딩 애니메이션
         with st.spinner("🧠 AI 선생님이 내용을 분석하고 문제를 출제 중입니다..."):
             try:
-                # AI 연결
                 genai.configure(api_key=api_key)
                 model = genai.GenerativeModel('gemini-pro')
                 
-                # 프롬프트 (AI에게 내리는 상세한 명령)
                 prompt = f"""
                 당신은 대한민국 최고의 1타 강사입니다. 학생이 입력한 스크립트를 분석해서 시험에 완벽하게 대비할 수 있도록 정리해주세요.
                 반드시 아래 3가지 형식으로 나누어 답변해주세요.
@@ -61,25 +66,19 @@ if st.button("🚀 AI 분석 시작 (Click)", use_container_width=True):
                 {script}
                 """
                 
-                # AI 응답 생성
                 response = model.generate_content(prompt)
                 
-                # 성공 메시지 & 풍선 효과
                 st.success("분석이 완료되었습니다! 아래 탭을 눌러 확인하세요.")
                 st.balloons()
                 
-                # 6. 결과 화면 (탭으로 구분) - 여기가 PRO 버전의 핵심!
                 tab1, tab2, tab3 = st.tabs(["📑 3줄 요약", "🔑 핵심 단어", "💯 실전 문제"])
                 
-                # AI 답변을 파싱해서(나눠서) 각 탭에 뿌려주기
-                # (간단하게 전체 내용을 다 보여주되, 사용자가 보기 편하게 탭 안에 넣음)
                 with tab1:
                     st.markdown("### 📝 바쁘면 이것만 봐!")
-                    st.write(response.text) # 전체 내용을 일단 보여줌 (AI가 나눠서 답변했으므로)
+                    st.write(response.text) 
                 
                 with tab2:
                     st.info("이 단어만 외우면 시험 통과!")
-                    # (여기서는 AI가 답변한 내용을 그대로 보여주지만, 나중에 더 고도화 가능)
                     st.markdown("👉 **AI가 분석한 내용에서 [Part 2]를 확인하세요.**")
 
                 with tab3:
@@ -88,4 +87,3 @@ if st.button("🚀 AI 분석 시작 (Click)", use_container_width=True):
 
             except Exception as e:
                 st.error(f"오류가 발생했습니다: {e}")
-                st.write("API 키가 정확한지, 혹은 자막 내용이 너무 길지 않은지 확인해주세요.")
