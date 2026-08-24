@@ -57,10 +57,16 @@ export function countBy(arr, fn){
   return [...m.entries()].sort((a, b) => b[1] - a[1]);
 }
 
-/** 가장 충동이 몰리는 시간대 문장 */
-export function peakHourText(byHour){
-  const max = Math.max(...byHour);
-  if (!max) return null;
-  const hours = byHour.map((n, i) => [i, n]).filter(([, n]) => n === max).map(([i]) => i);
-  return `${hours.map(h => `${h}시`).join(', ')}대에 가장 몰림 (${max}회)`;
+/** 가장 뜨거운 3시간 구간 → '23–2시' */
+export function peakRangeText(byHour, span = 3){
+  const total = byHour.reduce((a, b) => a + b, 0);
+  if (total < 3) return null;
+  let best = -1, at = 0;
+  for (let h = 0; h < 24; h++){
+    let sum = 0;
+    for (let k = 0; k < span; k++) sum += byHour[(h + k) % 24];
+    if (sum > best){ best = sum; at = h; }
+  }
+  if (!best) return null;
+  return `${at}\u2013${(at + span) % 24}\uc2dc`;
 }

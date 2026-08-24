@@ -8,7 +8,7 @@ export const DEFAULT_CONFIG = {
   bedtime: '23:30',
   wakeTime: '06:30',
   warnLeadMin: 30,
-  pledgeText: '나는 지금 폰을 내려놓고 잔다. 내일의 나를 위해서.',
+  pledgeText: '여기서 끊는다. 폰 내려놓고 잔다.',
   relockMin: 10,          // 다짐 통과 후 오버레이가 다시 뜨기까지
   urgeWaitSec: 60,        // 숏폼 마찰 카운트다운
   pomodoro: { focus: 25, break: 5, longBreak: 15, cycle: 4 },
@@ -126,12 +126,12 @@ export async function addStudySession(s){
 export const studyBetween = (fromKey, toKey) => db.range('studySessions', 'byDate', fromKey, toKey);
 
 /* ── 숏폼 충동 ────────────────────────────────── */
-export const EMOTIONS = ['지루함', '불안·초조', '보상심리', '그냥 습관', '외로움', '피곤함'];
+export const EMOTIONS = ['지루함', '불안', '보상심리', '습관', '외로움', '피곤함'];
 export const REPLACEMENTS = [
-  { id: 'stretch',    label: '5분 스트레칭', desc: '목·어깨·햄스트링. 타이머가 돌아갑니다.' },
-  { id: 'walk',       label: '5분 걷기',     desc: '폰 두고 집 안이라도 한 바퀴.' },
-  { id: 'water',      label: '물 + 세수',    desc: '찬물로 얼굴. 30초면 각성됩니다.' },
-  { id: 'study',      label: '바로 25분 공부', desc: '충동 에너지를 그대로 타이머에 넣기.' },
+  { id: 'stretch',    label: '5분 스트레칭', desc: '목·어깨·햄스트링' },
+  { id: 'walk',       label: '5분 걷기',     desc: '폰 두고 한 바퀴' },
+  { id: 'water',      label: '물 마시고 세수', desc: '찬물로 30초' },
+  { id: 'study',      label: '바로 25분 집중', desc: '충동을 그대로 타이머에' },
 ];
 
 export async function addUrge(u){

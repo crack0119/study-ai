@@ -1,8 +1,9 @@
 // 오프라인 동작용 앱 셸 캐시 + 알림 클릭 처리.
-const VERSION = 'v1';
+const VERSION = 'v2';
 const CACHE = `selfctrl-${VERSION}`;
 const SHELL = [
   './', './index.html', './manifest.webmanifest', './css/style.css',
+  './fonts/pretendard/pretendard.css',
   './js/main.js', './js/router.js', './js/db.js', './js/store.js',
   './js/notify.js', './js/ui.js', './js/backup.js',
   './js/lib/date.js',

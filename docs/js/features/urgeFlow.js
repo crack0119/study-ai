@@ -1,20 +1,21 @@
-// 숏폼 충동 마찰 플로우: 60초 대기 → 감정/이유 기록 → 대체 행동 선택.
-// 앱이 인스타·틱톡을 막을 수는 없다. 여는 데 드는 '비용'을 올리고, 패턴을 남기는 것이 목적.
-import { getConfig, addUrge, updateUrge, detectUrgeContext, EMOTIONS, REPLACEMENTS } from '../store.js';
-import { showOverlay, hideOverlay, ringHtml, ringUpdate, esc, toast, vibrate, beep } from '../ui.js';
+// 숏폼 마찰 플로우: 60초 대기 → 감정·이유 기록 → 대체 행동.
+// 앱이 인스타·틱톡을 막지는 못한다. 여는 비용을 올리고 패턴을 남기는 게 목적.
+import { getConfig, addUrge, detectUrgeContext, EMOTIONS, REPLACEMENTS } from '../store.js';
+import { showOverlay, hideOverlay, ringHtml, ringUpdate, esc, toast, vibrate, beep, primeAudio } from '../ui.js';
 import { mmss } from '../lib/date.js';
 
 let timer = null;
 let onDone = null;
 
-function clear(){ if (timer){ clearInterval(timer); timer = null; } }
+const clear = () => { if (timer){ clearInterval(timer); timer = null; } };
 
 export function startUrgeFlow(opts = {}){
   onDone = opts.onDone || null;
+  primeAudio();
   step1();
 }
 
-/* ── 1단계: 60초 대기 + 기록 ──────────────────── */
+/* ── 1단계: 대기 + 기록 ──────────────────── */
 async function step1(){
   const cfg = await getConfig();
   const waitSec = cfg.urgeWaitSec || 60;
@@ -23,62 +24,53 @@ async function step1(){
 
   const o = showOverlay(`
     <div class="ovl-top">
-      <div class="row between">
-        <div class="muted">숏폼 충동</div>
-        <button class="btn sm ghost" id="btnAbort" style="width:auto">닫기</button>
+      <div class="ovl-meta">
+        <span>충동</span>
+        <button class="b b--sm b--quiet" id="btnAbort" style="width:auto;min-height:32px;padding:0 6px;color:var(--fg-3)">닫기</button>
       </div>
-      ${ringHtml('urgeRing', String(waitSec))}
-      <p class="ovl-lead" style="text-align:center;margin-top:14px">
-        ${waitSec}초 지나면 다음으로 넘어갑니다.<br>그 사이에 아래 두 칸을 채우세요.
-      </p>
 
-      <h2>지금 감정은?</h2>
+      ${ringHtml('urgeRing', String(waitSec))}
+      <p class="cap" style="text-align:center;margin-top:16px">${waitSec}초 뒤에 넘어간다</p>
+
+      <p class="lbl" style="margin:32px 0 10px">감정</p>
       <div class="chips" id="emotions">
         ${EMOTIONS.map(e => `<button class="chip" data-e="${esc(e)}" aria-pressed="false">${esc(e)}</button>`).join('')}
       </div>
 
-      <h2>왜 지금 켜고 싶은가 (한 줄)</h2>
-      <textarea id="reason" rows="2" maxlength="120"
-        placeholder="예: 수학 3번 틀리고 짜증나서 도망치고 싶다"></textarea>
-      <div class="faint" style="margin-top:6px" id="reasonHint">5자 이상</div>
+      <p class="lbl" style="margin:26px 0 10px">이유</p>
+      <textarea class="in" id="reason" rows="2" maxlength="120"
+        placeholder="수학 3번 틀리고 짜증나서"></textarea>
     </div>
     <div class="ovl-bottom">
-      <button class="btn primary lg" id="btnNext" disabled>다음</button>
+      <button class="b b--solid b--big" id="btnNext" disabled>다음</button>
     </div>
-  `, { night: true });
+  `);
 
   const ring = o.querySelector('#urgeRing');
   const btnNext = o.querySelector('#btnNext');
   const reason = o.querySelector('#reason');
-  const hint = o.querySelector('#reasonHint');
 
   const evaluate = () => {
     const left = Math.max(0, waitSec - (Date.now() - startedAt) / 1000);
-    const ok = left <= 0 && emotion && reason.value.trim().length >= 5;
-    btnNext.disabled = !ok;
-    btnNext.textContent = left > 0 ? `대기 ${Math.ceil(left)}초` : (ok ? '다음' : '감정과 이유를 채우세요');
+    const filled = emotion && reason.value.trim().length >= 5;
+    btnNext.disabled = !(left <= 0 && filled);
+    btnNext.textContent = left > 0 ? `${Math.ceil(left)}초 남음` : (filled ? '다음' : '감정과 이유를 채운다');
   };
 
   o.querySelector('#emotions').addEventListener('click', (e) => {
     const b = e.target.closest('.chip');
     if (!b) return;
     emotion = b.dataset.e;
-    o.querySelectorAll('#emotions .chip').forEach(c =>
-      c.setAttribute('aria-pressed', String(c === b)));
+    o.querySelectorAll('#emotions .chip').forEach(c => c.setAttribute('aria-pressed', String(c === b)));
     evaluate();
   });
-
-  reason.addEventListener('input', () => {
-    const n = reason.value.trim().length;
-    hint.textContent = n >= 5 ? `${n}자` : `${n} / 5자`;
-    evaluate();
-  });
+  reason.addEventListener('input', evaluate);
 
   o.querySelector('#btnAbort').addEventListener('click', async () => {
     clear();
     await log({ startedAt, emotion, reason: reason.value.trim(), outcome: 'resisted', replacement: null });
     hideOverlay();
-    toast('그냥 닫았습니다. 기록해 뒀어요.');
+    toast('기록함');
     onDone?.();
   });
 
@@ -99,26 +91,27 @@ async function step1(){
   evaluate();
 }
 
-/* ── 2단계: 대체 행동 선택 ───────────────────── */
+/* ── 2단계: 대체 행동 ────────────────────── */
 function step2(ctx){
   const o = showOverlay(`
     <div class="ovl-top">
-      <div class="ovl-title">60초 버텼습니다.</div>
-      <p class="ovl-lead">이유: “${esc(ctx.reason)}” · ${esc(ctx.emotion)}</p>
-      <h2>지금 대신 할 것</h2>
-      <div class="list">
+      <h1 class="ovl-title">60초 버텼다</h1>
+      <p class="ovl-lead">${esc(ctx.emotion)} · “${esc(ctx.reason)}”</p>
+
+      <p class="lbl" style="margin:34px 0 10px">대신 할 것</p>
+      <div class="b-stack">
         ${REPLACEMENTS.map(r => `
-          <button class="btn" data-r="${r.id}" style="flex-direction:column;align-items:flex-start;min-height:64px;padding:12px 16px">
-            <span>${esc(r.label)}</span>
-            <span class="faint" style="font-weight:400">${esc(r.desc)}</span>
+          <button class="b b-sub" data-r="${r.id}">
+            <b>${esc(r.label)}</b><span>${esc(r.desc)}</span>
           </button>`).join('')}
       </div>
     </div>
     <div class="ovl-bottom">
-      <button class="btn ghost" id="btnResist">아무것도 안 하고 그냥 닫기</button>
-      <button class="btn danger" id="btnGiveIn">그래도 본다 (기록됨)</button>
+      <button class="b" id="btnResist">그냥 닫기</button>
+      <button class="b b--quiet" id="btnGiveIn"
+        style="color:var(--fg-3);min-height:44px;font-size:13.5px">그래도 본다</button>
     </div>
-  `, { night: true });
+  `);
 
   o.addEventListener('click', async (e) => {
     const b = e.target.closest('[data-r]');
@@ -133,7 +126,7 @@ function step2(ctx){
       replacementTimer(id === 'stretch' ? '5분 스트레칭' : '5분 걷기', id);
     } else {
       hideOverlay();
-      toast('좋아요. 30초만 다녀오세요.');
+      toast('기록함');
       onDone?.();
     }
   });
@@ -141,38 +134,39 @@ function step2(ctx){
   o.querySelector('#btnResist').addEventListener('click', async () => {
     await log({ ...ctx, outcome: 'resisted', replacement: null });
     hideOverlay();
-    vibrate(60);
-    toast('참았습니다. 기록에 남습니다.');
+    vibrate(50);
+    toast('버팀 · 기록함');
     onDone?.();
   });
 
   o.querySelector('#btnGiveIn').addEventListener('click', async () => {
     await log({ ...ctx, outcome: 'gave_in', replacement: null });
     hideOverlay();
-    toast('기록했습니다. 언제 무너지는지가 데이터가 됩니다.');
+    toast('기록함');
     onDone?.();
   });
 }
 
-/* ── 대체 행동 타이머 (5분) ──────────────────── */
-const STRETCH = ['목 좌우 천천히 10회', '어깨 뒤로 크게 10바퀴', '팔 뒤로 깍지 끼고 가슴 열기 30초',
-                 '햄스트링 스트레칭 좌우 30초', '허리 비틀기 좌우 30초', '눈 감고 심호흡 10회'];
+/* ── 대체 행동 타이머 ────────────────────── */
+const STRETCH = ['목 좌우 천천히 10회', '어깨 뒤로 크게 10바퀴', '깍지 끼고 가슴 열기 30초',
+                 '햄스트링 좌우 30초', '허리 비틀기 좌우 30초', '눈 감고 심호흡 10회'];
 
 function replacementTimer(title, id){
   const total = 300;
   const startedAt = Date.now();
   const o = showOverlay(`
     <div class="ovl-top">
-      <div class="ovl-title">${esc(title)}</div>
+      <div class="ovl-meta"><span>${esc(title)}</span></div>
       ${ringHtml('repRing', '5:00')}
-      ${id === 'stretch' ? `<ul class="muted" style="margin-top:20px;line-height:2;padding-left:18px">
-        ${STRETCH.map(s => `<li>${esc(s)}</li>`).join('')}</ul>` :
-        `<p class="ovl-lead" style="text-align:center;margin-top:20px">폰은 주머니에. 5분 뒤에 알림이 옵니다.</p>`}
+      ${id === 'stretch'
+        ? `<ul style="margin-top:34px">${STRETCH.map(s =>
+            `<li class="r" style="color:var(--fg-2)">${esc(s)}</li>`).join('')}</ul>`
+        : `<p class="cap" style="text-align:center;margin-top:26px">폰은 주머니에. 5분 뒤 알림이 온다.</p>`}
     </div>
     <div class="ovl-bottom">
-      <button class="btn ghost" id="btnRepDone">끝냈다</button>
+      <button class="b b--quiet" id="btnRepDone">끝</button>
     </div>
-  `, { night: true });
+  `);
 
   const ring = o.querySelector('#repRing');
   clear();
@@ -184,16 +178,15 @@ function replacementTimer(title, id){
       clear();
       vibrate([200, 100, 200]); beep(2);
       const btn = o.querySelector('#btnRepDone');
-      if (btn) btn.textContent = '완료 — 공부로 돌아가기';
+      if (btn){ btn.textContent = '완료'; btn.className = 'b b--solid b--big'; }
     }
   }, 250);
 
   o.querySelector('#btnRepDone').addEventListener('click', () => {
-    clear(); hideOverlay(); toast('잘했습니다.'); onDone?.();
+    clear(); hideOverlay(); onDone?.();
   });
 }
 
-/* ── 기록 ─────────────────────────────────────── */
 async function log({ startedAt, emotion, reason, outcome, replacement }){
   const contextBefore = await detectUrgeContext(startedAt);
   return addUrge({
@@ -202,5 +195,3 @@ async function log({ startedAt, emotion, reason, outcome, replacement }){
     waitedSec: Math.round((Date.now() - startedAt) / 1000),
   });
 }
-
-export const _updateUrge = updateUrge;

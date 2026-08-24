@@ -41,14 +41,14 @@ export async function shareBackup(){
 export async function importFile(file, mode = 'merge'){
   const text = await file.text();
   const data = JSON.parse(text);
-  if (data?.app !== 'selfctrl' || !data.stores) throw new Error('이 앱의 백업 파일이 아닙니다.');
+  if (data?.app !== 'selfctrl' || !data.stores) throw new Error('이 앱의 백업 파일이 아님');
   if (mode === 'replace') await db.wipe();
   let n = 0;
   for (const [name, rows] of Object.entries(data.stores)){
     if (!db.STORES[name] || !Array.isArray(rows)) continue;
     n += await db.putAll(name, rows);
   }
-  toast(`${n}건 복원했습니다. 새로고침합니다.`);
+  toast(`${n}건 복원 · 새로고침`);
   return n;
 }
 

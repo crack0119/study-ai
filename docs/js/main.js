@@ -30,17 +30,17 @@ async function boot(){
   pomo.onSessionEnd(async (snap) => {
     if (snap.mode === 'focus'){
       setPending(snap);   // await 이전에 동기로 — 화면 갱신과 경쟁하지 않게
-      await fire('집중 완료', `${snap.subject || '공부'} ${Math.round(snap.actualFocusSec / 60)}분. 집중도를 기록하세요.`, 'pomo');
+      await fire('집중 완료', `${snap.subject || '공부'} ${Math.round(snap.actualFocusSec / 60)}분 · 집중도 기록`, 'pomo');
       if (router.path() !== 'timer') location.hash = '#/timer'; else router.refresh();
     } else {
-      await fire('휴식 끝', '다시 시작할 시간입니다.', 'pomo');
+      await fire('휴식 끝', '다시 시작', 'pomo');
       if (router.path() === 'timer') router.refresh();
     }
   });
 
   onMissed((list) => {
     const wake = list.find(r => r.type === 'wake');
-    toast(wake ? '기상 알림을 놓쳤습니다. 기상 체크인을 확인하세요.' : `놓친 알림 ${list.length}건`, 3200);
+    toast(wake ? '기상 알림을 놓쳤다 · 체크인 확인' : `놓친 알림 ${list.length}건`, 3200);
   });
 
   await router.start();
@@ -55,6 +55,6 @@ async function boot(){
 
 boot().catch((e) => {
   const b = document.getElementById('boot');
-  if (b){ b.hidden = false; b.textContent = '시작에 실패했습니다: ' + (e?.message || e); }
+  if (b){ b.hidden = false; b.textContent = '시작 실패 · ' + (e?.message || e); }
   console.error(e);
 });

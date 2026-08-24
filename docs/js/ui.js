@@ -85,11 +85,12 @@ export async function keepAwake(want){
 
 export const overlayEl = () => document.getElementById('overlay');
 
-export function showOverlay(html, { night = false } = {}){
+export function showOverlay(html){
   const o = overlayEl();
-  o.className = 'overlay' + (night ? ' night' : '');
+  o.className = 'overlay';
   o.innerHTML = html;
   o.hidden = false;
+  o.scrollTop = 0;
   document.body.style.overflow = 'hidden';
   return o;
 }
@@ -103,23 +104,25 @@ export function hideOverlay(){
 
 export const isOverlayOpen = () => !overlayEl().hidden;
 
-/** 진행 링 SVG */
+/* 카운트다운 링 */
+const RING_R = 88, RING_C = 2 * Math.PI * RING_R;
+
 export function ringHtml(id, label){
-  const R = 100, C = 2 * Math.PI * R;
   return `<div class="ring" id="${id}">
-    <svg viewBox="0 0 220 220" aria-hidden="true">
-      <circle class="track" cx="110" cy="110" r="${R}"></circle>
-      <circle class="prog" cx="110" cy="110" r="${R}"
-              stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="0"></circle>
+    <svg viewBox="0 0 196 196" aria-hidden="true">
+      <circle class="track" cx="98" cy="98" r="${RING_R}"></circle>
+      <circle class="prog" cx="98" cy="98" r="${RING_R}"
+              stroke-dasharray="${RING_C.toFixed(1)}" stroke-dashoffset="0"></circle>
     </svg>
-    <div class="num">${label}</div>
+    <div class="val">${label}</div>
   </div>`;
 }
 
 export function ringUpdate(root, ratio, label){
-  const R = 100, C = 2 * Math.PI * R;
+  if (!root) return;
   const prog = root.querySelector('.prog');
-  if (prog) prog.setAttribute('stroke-dashoffset', String(C * (1 - Math.max(0, Math.min(1, ratio)))));
-  const num = root.querySelector('.num');
-  if (num && label != null) num.textContent = label;
+  if (prog) prog.setAttribute('stroke-dashoffset',
+    String(RING_C * (1 - Math.max(0, Math.min(1, ratio)))));
+  const val = root.querySelector('.val');
+  if (val && label != null) val.textContent = label;
 }

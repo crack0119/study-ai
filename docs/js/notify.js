@@ -9,12 +9,12 @@ export const permission = () => (supported() ? Notification.permission : 'unsupp
 /** iOS는 홈 화면에 추가된 상태에서만 권한 요청이 뜬다. 반드시 사용자 탭 안에서 호출할 것. */
 export async function requestPermission(){
   if (!supported()){
-    toast('이 브라우저는 알림을 지원하지 않습니다. 홈 화면에 추가 후 다시 열어주세요.');
+    toast('홈 화면에 추가한 뒤 다시 열 것');
     return 'unsupported';
   }
   try {
     const p = await Notification.requestPermission();
-    toast(p === 'granted' ? '알림이 켜졌습니다.' : '알림이 거부됐습니다. 폰 설정에서 허용해주세요.');
+    toast(p === 'granted' ? '알림 켜짐' : '거부됨 · 폰 설정에서 허용');
     return p;
   } catch {
     return Notification.permission;

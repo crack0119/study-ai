@@ -33,41 +33,50 @@ async function showPledge(){
   const now = Date.now();
   const late = now >= w.bedtime.getTime();
   const headline = late
-    ? `취침 시각 ${humanDur(now - w.bedtime.getTime())} 초과`
-    : `취침까지 ${humanDur(w.bedtime.getTime() - now)}`;
+    ? `취침 ${humanDur(now - w.bedtime.getTime())} 지남`
+    : `취침 ${humanDur(w.bedtime.getTime() - now)} 전`;
 
   const o = showOverlay(`
     <div class="ovl-top">
-      <div class="muted">${esc(hhmm(new Date()))} · 목표 취침 ${esc(cfg.bedtime)}</div>
-      <div class="ovl-title" style="margin-top:8px">${esc(headline)}</div>
-      <p class="ovl-lead">아래 문장을 <b>그대로</b> 입력해야 화면이 열립니다.${
-        log.pledgeCount > 0 ? ` 오늘 밤 <b>${log.pledgeCount}번째</b> 미루는 중입니다.` : ''
+      <div class="ovl-meta">
+        <span class="num">${esc(hhmm(new Date()))}</span>
+        <span class="num">목표 ${esc(cfg.bedtime)}</span>
+      </div>
+      <h1 class="ovl-title" style="margin-top:14px">${esc(headline)}</h1>
+      <p class="ovl-lead">아래 문장을 그대로 입력해야 열린다.${
+        log.pledgeCount > 0 ? ` 오늘 밤 <span style="color:var(--warn)">${log.pledgeCount}번째</span> 미루는 중.` : ''
       }</p>
-      <div class="pledge-target" id="pledgeTarget">${diffHtml(cfg.pledgeText, '')}</div>
-      <textarea id="pledgeInput" rows="3" placeholder="여기에 그대로 입력"
+
+      <div class="pledge" id="pledgeTarget">${diffHtml(cfg.pledgeText, '')}</div>
+      <div class="pledge-bar"><i id="pledgeBar"></i></div>
+      <textarea class="in" id="pledgeInput" rows="3" placeholder="여기에 그대로"
         autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false"></textarea>
-      <div class="faint" id="pledgeHint" style="margin-top:8px">한 글자도 틀리면 열리지 않습니다.</div>
+      <p class="cap" id="pledgeHint" style="margin-top:9px">&nbsp;</p>
     </div>
     <div class="ovl-bottom">
-      <button class="btn primary lg" id="btnSleepNow" disabled>지금 잔다</button>
-      <button class="btn ghost" id="btnDelay" disabled>${cfg.relockMin}분만 더 쓴다</button>
+      <button class="b b--solid b--big" id="btnSleepNow" disabled>잔다</button>
+      <button class="b b--quiet" id="btnDelay" disabled>${cfg.relockMin}분만 더</button>
     </div>
-  `, { night: true });
+  `);
 
   const input = o.querySelector('#pledgeInput');
   const targetBox = o.querySelector('#pledgeTarget');
+  const bar = o.querySelector('#pledgeBar');
   const btnSleep = o.querySelector('#btnSleepNow');
   const btnDelay = o.querySelector('#btnDelay');
   const hint = o.querySelector('#pledgeHint');
+  const totalLen = [...norm(cfg.pledgeText)].length;
 
   const sync = () => {
     const typed = input.value;
     targetBox.innerHTML = diffHtml(cfg.pledgeText, typed);
     const ok = norm(typed) === norm(cfg.pledgeText);
+    const n = [...norm(typed)].length;
     btnSleep.disabled = !ok;
     btnDelay.disabled = !ok;
-    hint.textContent = ok ? '통과. 아래에서 선택하세요.'
-      : `${[...norm(typed)].length} / ${[...norm(cfg.pledgeText)].length}자`;
+    bar.style.width = `${Math.min(100, (n / Math.max(1, totalLen)) * 100)}%`;
+    hint.innerHTML = ok ? '&nbsp;'
+      : (targetBox.querySelector('.no') ? '틀린 글자가 있다' : `${n} / ${totalLen}`);
   };
   input.addEventListener('input', sync);
   sync();
@@ -81,7 +90,7 @@ async function showPledge(){
     });
     setUnlock(0);
     await scheduleWake();
-    vibrate(60);
+    vibrate(50);
     await showNightLock();
   });
 
@@ -94,7 +103,7 @@ async function showPledge(){
     });
     setUnlock(Date.now() + (cfg.relockMin || 10) * MIN);
     hideOverlay();
-    toast(`${cfg.relockMin}분 뒤 다시 잠깁니다.`);
+    toast(`${cfg.relockMin}분 뒤 다시 잠긴다`);
   });
 
   if (!log.overlayShownAt) await patchSleepLog(log.date, { overlayShownAt: Date.now() });
@@ -109,25 +118,21 @@ export async function showNightLock(){
   const canCheckin = Date.now() >= wakeTs - 30 * MIN;
 
   const o = showOverlay(`
-    <div class="ovl-top" style="text-align:center">
-      <div class="big" style="font-size:56px">${esc(hhmm(new Date()))}</div>
-      <p class="ovl-lead">취침 체크인 완료 · 기상 목표 ${esc(cfg.wakeTime)}</p>
-      <p class="faint" style="margin-top:18px;line-height:1.7">
-        폰은 여기서 끝입니다.<br>내일 ${esc(cfg.wakeTime)}에 기상 체크인을 하면 스트릭이 이어집니다.
-      </p>
+    <div class="ovl-top" style="display:flex;flex-direction:column;justify-content:center;text-align:center">
+      <div class="nightclock">${esc(hhmm(new Date()))}</div>
+      <p class="cap num" style="margin-top:14px">기상 ${esc(cfg.wakeTime)}</p>
+      <p class="ovl-lead" style="margin-top:34px">여기서 끝.</p>
     </div>
     <div class="ovl-bottom">
-      <button class="btn primary lg" id="btnWake" ${canCheckin ? '' : 'disabled'}>
-        ${canCheckin ? '기상 체크인' : `기상 체크인 (${esc(hhmm(new Date(wakeTs - 30 * MIN)))}부터)`}
+      <button class="b b--solid b--big" id="btnWake" ${canCheckin ? '' : 'disabled'}>
+        ${canCheckin ? '기상 체크인' : `기상 체크인 · ${esc(hhmm(new Date(wakeTs - 30 * MIN)))}부터`}
       </button>
-      <button class="btn ghost" id="btnReopen">못 자겠다 — 다짐 다시 쓰기</button>
-      <p class="faint" style="text-align:center;margin-top:4px">다시 열려면 문장을 처음부터 입력해야 합니다.</p>
+      <button class="b b--quiet" id="btnReopen">다시 열기</button>
+      <p class="cap" style="text-align:center">다시 열려면 문장을 처음부터 입력해야 한다.</p>
     </div>
-  `, { night: true });
+  `);
 
-  o.querySelector('#btnWake').addEventListener('click', async () => {
-    await wakeCheckin();
-  });
+  o.querySelector('#btnWake').addEventListener('click', () => wakeCheckin());
   o.querySelector('#btnReopen').addEventListener('click', async () => {
     await patchSleepLog(log.date, { sleepCheckinAt: null });
     await showPledge();
@@ -161,7 +166,7 @@ export async function scheduleWake(){
 
 export async function wakeCheckin(){
   const log = await getSleepLog();
-  if (log.wakeCheckinAt){ toast('이미 체크인했습니다.'); return log; }
+  if (log.wakeCheckinAt){ toast('이미 체크인함'); return log; }
   const saved = await patchSleepLog(log.date, { wakeCheckinAt: Date.now() });
   await rescheduleByType('wake', null);      // 이미 일어났으니 예약 알림 취소
   await rescheduleByType('bedtime', null);
@@ -170,7 +175,7 @@ export async function wakeCheckin(){
   keepAwake(false);
   const j = judgeSleep(saved);
   vibrate([80, 60, 80]);
-  toast(j.wakeOk ? '기상 체크인 완료. 스트릭 유지!' : '체크인 완료 (목표보다 늦음).');
+  toast(j.wakeOk ? `기상 체크인 · 연속 유지` : '체크인 완료 · 목표보다 늦음');
   onWakeCheckin?.();
   return saved;
 }
