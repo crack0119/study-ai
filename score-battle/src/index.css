@@ -1,0 +1,88 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* 팔레트: 무채색 지면 + 팀 컬러 2색만. 라이트/다크 모두 같은 변수 이름을 쓴다. */
+:root {
+  --canvas: #f4f4f1;
+  --surface: #ffffff;
+  --surface-2: #ececeA;
+  --line: #dfdfda;
+  --line-strong: #c9c9c2;
+  --ink: #16161a;
+  --ink-soft: #4a4a52;
+  --ink-mute: #86868f;
+  --team-a: #c2410c;
+  --team-b: #1d4ed8;
+  --team-a-wash: #fdf0e8;
+  --team-b-wash: #eaf0fe;
+  --good: #15803d;
+  --warn: #a16207;
+  color-scheme: light;
+}
+
+.dark {
+  --canvas: #0a0a0b;
+  --surface: #121214;
+  --surface-2: #191a1d;
+  --line: #26262b;
+  --line-strong: #3a3a41;
+  --ink: #f2f2ef;
+  --ink-soft: #b6b6bd;
+  --ink-mute: #7d7d87;
+  --team-a: #d9782f;
+  --team-b: #5d93ea;
+  --team-a-wash: #2a1509;
+  --team-b-wash: #0e1830;
+  --good: #4ade80;
+  --warn: #fbbf24;
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-ink-mute: var(--ink-mute);
+  --color-team-a: var(--team-a);
+  --color-team-b: var(--team-b);
+  --color-team-a-wash: var(--team-a-wash);
+  --color-team-b-wash: var(--team-b-wash);
+  --color-good: var(--good);
+  --color-warn: var(--warn);
+  --font-sans: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
+    system-ui, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+}
+
+html, body, #root { height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+
+/* 점수는 자리수가 흔들리면 안 된다. */
+.tnum { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
+
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+input[type="number"] { -moz-appearance: textfield; }
+
+@keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.rise { animation: rise .28s cubic-bezier(.2,.7,.3,1) both; }
+
+@keyframes pop { 0% { transform: scale(.96); opacity: 0 } 60% { transform: scale(1.02) } 100% { transform: none; opacity: 1 } }
+.pop { animation: pop .3s cubic-bezier(.2,.7,.3,1) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .rise, .pop { animation: none; }
+}
